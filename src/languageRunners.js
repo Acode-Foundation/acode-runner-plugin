@@ -22,27 +22,17 @@ export default class LanguageRunners {
 			description: 'Python interpreter'
 		});
 
-		// Node.js / JavaScript
-		// this.#runners.set('nodejs', {
-		// 	extensions: ['js', 'mjs'],
-		// 	commands: [
-		// 		{ cmd: 'node "{file}"', packages: ['nodejs', 'npm'] }
-		// 	],
-		// 	description: 'Node.js JavaScript runtime',
-		// 	icon: 'file_type_js'
-		// });
-
 		// C
 		this.#runners.set('c', {
 			extensions: ['c'],
 			commands: [
 				{
 					cmd: 'gcc "{file}" -o "{name}" && ./{name}',
-					packages: ['gcc', 'musl-dev'] // Primary option: GCC
+					packages: ['gcc', 'musl-dev']
 				},
 				{
 					cmd: 'clang "{file}" -o "{name}" && ./{name}',
-					packages: ['clang', 'musl-dev'] // Fallback option: Clang
+					packages: ['clang', 'musl-dev']
 				}
 			],
 			description: 'C compiler'
@@ -123,7 +113,7 @@ export default class LanguageRunners {
 			extensions: ['sh', 'bash'],
 			commands: [
 				{ cmd: 'bash "{file}"', packages: ['bash'] },
-				{ cmd: 'sh "{file}"', packages: [] } // sh is built-in
+				{ cmd: 'sh "{file}"', packages: [] }
 			],
 			description: 'Shell script interpreter'
 		});
@@ -166,7 +156,7 @@ export default class LanguageRunners {
 	/**
 	 * Run file using appropriate language runner
 	 */
-	async runFile(file, saveFirst = false) {
+	async runFile(file) {
 		if (!file || file.type !== 'editor') {
 			window.toast('Cannot run this file type');
 			return;
@@ -180,7 +170,7 @@ export default class LanguageRunners {
 			return;
 		}
 
-		// Try to run with the first available command
+		// Try to run with available command
 		await this.#executeWithRunner(runner, file);
 	}
 
@@ -193,7 +183,6 @@ export default class LanguageRunners {
 		
 		for (const commandConfig of runner.commands) {
 			try {
-				// Check if command requires special setup (like Cargo for Rust)
 				if (commandConfig.requiresCargo && file.uri && !await this.#checkCargoProject(file.uri)) {
 					continue;
 				}
@@ -206,7 +195,6 @@ export default class LanguageRunners {
 					}
 				}
 
-				// Try to execute the command
 				const success = await this.#tryCommand(commandConfig, file, nameWithoutExt);
 				if (success) {
 					return;
@@ -234,18 +222,8 @@ export default class LanguageRunners {
 			}
 
 			terminal.file.makeActive();
-			
-			await this.#sendCommand(terminal, 'clear');
 
-			await new Promise(resolve => setTimeout(resolve, 300));
-
-			if (file.uri && !file.isUnsaved) {
-				// File is saved, we can run it directly from file system
-				await this.#runSavedFile(terminal, commandConfig, file, nameWithoutExt);
-			} else {
-				// File is unsaved or in memory, create temporary file
-				await this.#runUnsavedFile(terminal, commandConfig, file, nameWithoutExt, fileContent);
-			}
+			await this.#executeWithWrapper(terminal, commandConfig, file, nameWithoutExt, fileContent);
 			
 			return true;
 		} catch (error) {
@@ -255,108 +233,144 @@ export default class LanguageRunners {
 	}
 
 	/**
-	 * Get existing terminal or create new one
+	 * Execute command with a nice wrapper script for better UX
 	 */
-	async #getOrCreateTerminal(filename) {
-		const existingTerminals = acode.require('terminal').getAll();
+	async #executeWithWrapper(terminal, commandConfig, file, nameWithoutExt, fileContent) {
+		const filename = file.filename;
+		const extension = filename.split('.').pop() || '';
 		
-		// Look for a terminal that's not busy with installation
-		for (const [id, terminal] of existingTerminals) {
-			if (!terminal.name.includes('Install:')) {
-				// Reuse existing terminal
-				return terminal;
-			}
-		}
+		// Create wrapper script content
+		const wrapperScript = await this.#createWrapperScript(commandConfig, file, nameWithoutExt, fileContent);
+		const wrapperPath = `/tmp/acode_runner_${Date.now()}.sh`;
 		
-		// No suitable terminal found, create new one
-		return await acode.require('terminal').createServer({
-			name: `Run: ${filename}`
-		});
+		// Create and execute wrapper script silently but don't use exec to avoid closing terminal
+		const fullCommand = `{
+cat > '${wrapperPath}' << 'WRAPPER_EOF'
+${wrapperScript}
+WRAPPER_EOF
+chmod +x '${wrapperPath}'
+'${wrapperPath}'
+rm -f '${wrapperPath}'
+} 2>/dev/null`;
+		
+		await this.#sendCommand(terminal, fullCommand);
 	}
 
 	/**
-	 * Run saved file from file system
+	 * Create the wrapper script content
 	 */
-	async #runSavedFile(terminal, commandConfig, file, nameWithoutExt) {
+	async #createWrapperScript(commandConfig, file, nameWithoutExt, fileContent) {
 		const filename = file.filename;
-		const workingDir = acode.require('Url').dirname(file.uri);
+		const extension = filename.split('.').pop() || '';
+		const tempFile = `/tmp/${filename}`;
 		
-		let command = commandConfig.cmd
-			.replace(/\{file\}/g, filename)
-			.replace(/\{name\}/g, nameWithoutExt)
-			.replace(/\{path\}/g, file.uri);
-
-		// Handle different file location types
-		if (file.uri.startsWith('content://') || file.uri.includes('::')) {
-			// SAF or complex URI - copy to temp location first
-			const tempFile = `/tmp/${filename}`;
-			await this.#sendCommand(terminal, `echo '${file.session.getValue().replace(/'/g, "'\\''")}' > '${tempFile}'`);
-			
-			// Update command to use temp file
-			command = commandConfig.cmd
+		// Determine if we need to create a temp file
+		const needsTempFile = !file.uri || file.isUnsaved || 
+			file.uri.startsWith('content://') || file.uri.includes('::') ||
+			file.uri.startsWith('ftp:') || file.uri.startsWith('sftp:');
+		
+		// Prepare the actual command
+		let actualCommand;
+		let workingDir = '/tmp';
+		
+		if (needsTempFile) {
+			// Use temp file
+			actualCommand = commandConfig.cmd
 				.replace(/\{file\}/g, tempFile)
 				.replace(/\{name\}/g, nameWithoutExt)
 				.replace(/\{path\}/g, tempFile);
-			
-			// Execute from /tmp
-			await this.#sendCommand(terminal, `${command}`);
-		} else if (file.uri.startsWith('ftp:') || file.uri.startsWith('sftp:')) {
-			// Remote file - use content from editor
-			await this.#runUnsavedFile(terminal, commandConfig, file, nameWithoutExt, file.session.getValue());
 		} else {
-			// Local file - try to change to directory and run
-			try {
-				// Extract actual file path for local files
-				let actualPath = workingDir;
-				if (actualPath.startsWith('file://')) {
-					actualPath = actualPath.substring(7);
-				}
-				
-				// Use $HOME for Alpine home directory
-				if (actualPath.includes('/data/user/0/com.foxdebug.acode/files/alpine/home')) {
-					actualPath = '$HOME';
-				}
-				
-				// Don't quote $HOME as it's a variable that needs expansion
-				const cdCommand = actualPath === '$HOME' ? 'cd $HOME' : `cd '${actualPath}'`;
-				await this.#sendCommand(terminal, `${cdCommand} && ${command}`);
-			} catch (error) {
-				// Fallback to temp file method
-				await this.#runUnsavedFile(terminal, commandConfig, file, nameWithoutExt, file.session.getValue());
-			}
+			// Use actual file
+			const actualPath = file.uri.startsWith('file://') ? file.uri.substring(7) : file.uri;
+			workingDir = actualPath.includes('/data/user/0/com.foxdebug.acode/files/alpine/home') ? '$HOME' : `'${acode.require('Url').dirname(actualPath)}'`;
+			
+			actualCommand = commandConfig.cmd
+				.replace(/\{file\}/g, filename)
+				.replace(/\{name\}/g, nameWithoutExt)
+				.replace(/\{path\}/g, actualPath);
 		}
+
+		// Create the wrapper script
+		let script = `#!/bin/bash\n`;
+		
+		// Clear screen properly and redirect any stderr from clear to /dev/null
+		script += `printf '\\033[2J\\033[H' 2>/dev/null\n`;
+		
+		// Create temp file if needed (completely silently)
+		if (needsTempFile) {
+			script += `cat > '${tempFile}' << 'SOURCE_EOF' 2>/dev/null\n${fileContent}\nSOURCE_EOF\n`;
+		}
+		
+		script += `echo -e "\\033[1;1;36m[RUNNER]\\033[0m \\033[2;37mRunning\\033[0m \\033[1;93m${filename}\\033[0m\\033[2;37m...\\033[0m"\n`;
+		script += `echo\n`;
+
+		// Change to working directory and execute
+		if (workingDir !== '/tmp') {
+			script += `cd ${workingDir} && ${actualCommand}\n`;
+		} else {
+			script += `${actualCommand}\n`;
+		}
+		
+		// Store exit code
+		script += `EXIT_CODE=$?\n`;
+
+		// Show colored result based on exit code with separation
+		script += `echo\n`;
+		script += `echo -e "\\033[2;90m────────────────────────────────────────\\033[0m"\n`;
+		script += `if [ $EXIT_CODE -eq 0 ]; then\n`;
+		script += `    echo -e "\\033[1;1;36m[RUNNER]\\033[0m \\033[1;32m✅ Program finished successfully\\033[0m"\n`;
+		script += `else\n`;
+		script += `    echo -e "\\033[1;1;36m[RUNNER]\\033[0m \\033[1;31m❌ Program finished with errors\\033[0m \\033[2;90m(exit code: $EXIT_CODE)\\033[0m"\n`;
+		script += `fi\n`;
+		script += `echo -e "\\033[2;90m────────────────────────────────────────\\033[0m"\n`;
+		
+		// Clean up temp file if created (silently)
+		if (needsTempFile) {
+			script += `rm -f '${tempFile}' 2>/dev/null\n`;
+		}
+		
+		// Don't exit or close terminal, just finish normally
+		script += `echo\n`;
+		
+		return script;
 	}
 
 	/**
-	 * Run unsaved file content via temporary file
+	 * Get existing terminal or create new one
 	 */
-	async #runUnsavedFile(terminal, commandConfig, file, nameWithoutExt, content) {
-		const filename = file.filename;
-		const tempFile = `/tmp/${filename}`;
-		
-		// Create temporary file
-		await this.#sendCommand(terminal, `cat > '${tempFile}' << 'ACODE_EOF'\n${content}\nACODE_EOF`);
-		// Replace placeholders in command for temp file
-		const command = commandConfig.cmd
-			.replace(/\{file\}/g, tempFile)
-			.replace(/\{name\}/g, nameWithoutExt)
-			.replace(/\{path\}/g, tempFile);
-
-		// Execute from /tmp directory
-		await this.#sendCommand(terminal, `${command}`);
+	async #getOrCreateTerminal(filename) {
+		try {
+			const existingTerminals = acode.require('terminal').getAll();
+			
+			// Look for a terminal that's not busy with installation
+			for (const [id, terminal] of existingTerminals) {
+				if (!terminal.name.includes('Install:')) {
+					return terminal;
+				}
+			}
+			
+			// Create new terminal
+			const terminal = await acode.require('terminal').createServer({
+				name: `Run: ${filename}`
+			});
+			
+			await new Promise(resolve => setTimeout(resolve, 500));
+			
+			return terminal;
+		} catch (error) {
+			console.error('Error creating terminal:', error);
+			return null;
+		}
 	}
-
 
 	/**
 	 * Send command to terminal shell process
 	 */
 	async #sendCommand(terminal, command) {
 		if (terminal.component && terminal.component.pid) {
-			// If we have a process ID, send to the actual shell process
 			try {
 				await Executor.write(terminal.component.pid, command + '\r');
 			} catch (error) {
-				// Fallback to terminal write
 				acode.require('terminal').write(terminal.id, command + '\r');
 			}
 		}
@@ -367,14 +381,10 @@ export default class LanguageRunners {
 	 */
 	async #checkCommandExists(commandConfig) {
 		try {
-			// Extract the main command (first word) from the command string
 			const mainCommand = commandConfig.cmd.split(' ')[0];
-			
-			// Use 'which' command to check if it exists
 			const result = await Executor.execute(`which ${mainCommand}`, true);
 			return result && result.trim() !== '';
 		} catch (error) {
-			// Command doesn't exist
 			return false;
 		}
 	}
@@ -397,7 +407,7 @@ export default class LanguageRunners {
 	 * Offer to install packages for a specific command
 	 */
 	async #offerPackageInstallation(runner, commandConfig) {
-		const packages = commandConfig.packages.filter(pkg => pkg); // Remove empty packages
+		const packages = commandConfig.packages.filter(pkg => pkg);
 
 		if (packages.length === 0) {
 			window.toast(`${runner.description} not found. Please install manually.`);
@@ -427,10 +437,8 @@ export default class LanguageRunners {
 		);
 
 		try {
-			// Update package lists first
 			await Executor.execute('apk update', true);
 
-			// Install packages in background
 			const installCmd = `apk add ${packages.join(' ')}`;
 			await Executor.execute(installCmd, true);
 			installLoader.hide();
@@ -474,7 +482,6 @@ export default class LanguageRunners {
 	 * Cleanup when plugin is destroyed
 	 */
 	destroy() {
-		// Clear runners
 		this.#runners.clear();
 	}
 }
