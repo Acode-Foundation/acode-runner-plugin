@@ -1,0 +1,22 @@
+{
+  "name": "acode-runner-plugin",
+  "version": "1.0.0",
+  "description": "Code Runner Plugin for Acode",
+  "main": "src/main.js",
+  "repository": "https://github.com/Acode-Foundation/acode-runner-plugin.git",
+  "author": "Acode Foundation",
+  "license": "MIT",
+  "dependencies": {
+    "@types/ace": "^0.0.52",
+    "html-tag-js": "^2.4.15"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.8",
+    "jszip": "^3.10.1"
+  },
+  "scripts": {
+    "dev": "node esbuild.config.mjs --serve",
+    "build": "node esbuild.config.mjs"
+  },
+  "browserslist": "cover 100%,not android < 5"
+}

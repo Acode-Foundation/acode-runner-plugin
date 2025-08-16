@@ -1,0 +1,18 @@
+{
+  "$schema": "https://acode.app/schema/plugin/v0.1.0.json",
+  "id": "acode.runner.plugin",
+  "name": "Runner",
+  "main": "main.js",
+  "version": "1.0.0",
+  "repository": "https://github.com/Acode-Foundation/acode-runner-plugin.git",
+  "icon": "icon.png",
+  "minVersionCode": 963,
+  "license": "MIT",
+  "keywords": ["runner","code runner","code execution"],
+  "price": 0,
+  "author": {
+    "name": "Raunak",
+    "email": "raunak@bajrangcoder.dev",
+    "github": "bajrangCoder"
+  }
+}
