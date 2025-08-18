@@ -239,15 +239,9 @@ export default class LanguageRunners {
 		const wrapperScript = await this.#createWrapperScript(commandConfig, file, nameWithoutExt, fileContent);
 		const wrapperPath = `/tmp/acode_runner_${Date.now()}.sh`;
 		
-		// Create and execute wrapper script silently but don't use exec to avoid closing terminal
-		const fullCommand = `{
-cat > '${wrapperPath}' << 'WRAPPER_EOF'
-${wrapperScript}
-WRAPPER_EOF
-chmod +x '${wrapperPath}'
-'${wrapperPath}'
-rm -f '${wrapperPath}'
-} 2>/dev/null`;
+		// Use printf to create script 
+		const escapedScript = wrapperScript.replace(/'/g, "'\"'\"'");
+		const fullCommand = `printf '%s' '${escapedScript}' > '${wrapperPath}' && chmod +x '${wrapperPath}' && '${wrapperPath}' && rm -f '${wrapperPath}'`;
 		
 		await this.#sendCommand(terminal, fullCommand);
 	}

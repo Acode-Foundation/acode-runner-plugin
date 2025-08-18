@@ -8,91 +8,66 @@ class RunnerPlugin {
   async init() {
     try {
       languageRunners.init();
-
-      this.setupFileHooks();
+      this.setupPlayButton();
     } catch (error) {
       console.error('Error initializing runner plugin:', error);
     }
   }
 
-  setupFileHooks() {
-    const EditorFile = acode.require('EditorFile');
+  setupPlayButton() {
+    // Create play button element
+    this.$runBtn = document.createElement("span");
+    this.$runBtn.className = "icon play_arrow";
+    this.$runBtn.setAttribute("action", "run");
+    this.$runBtn.onclick = this.run.bind(this);
+    this.$runBtn.title = "Run Code";
     
-    // Store original methods for cleanup
-    this.originalReadCanRun = EditorFile.prototype.readCanRun;
-    this.originalRun = EditorFile.prototype.run;
+    // Check and show button for runnable files
+    this.checkRunnable();
     
-    
-    const plugin = this; // Capture plugin instance for closures
-    
-    // Hook into readCanRun to extend functionality
-    if (this.originalReadCanRun) {
-      EditorFile.prototype.readCanRun = async function() {
-        try {
-          if (!Terminal || !Terminal.isInstalled()) {
-            await plugin.originalReadCanRun.call(this);
-            return;
-          }
+    // Listen for file switches and renames
+    editorManager.on('switch-file', this.checkRunnable.bind(this));
+    editorManager.on('rename-file', this.checkRunnable.bind(this));
+  }
 
-          const isLanguageFile = languageRunners.canRun(this.filename);
-          
-          if (isLanguageFile) {
-            this.writeCanRun(() => true);
-            return;
-          }
-          
-          await plugin.originalReadCanRun.call(this);
-          
-        } catch (error) {
-          console.error('Plugin readCanRun error:', error);
-          // Always fallback to original to avoid breaking the app
-          try {
-            await plugin.originalReadCanRun.call(this);
-          } catch (originalError) {
-            console.error('Original readCanRun also failed:', originalError);
-          }
-        }
-      };
+  checkRunnable() {
+    const file = editorManager.activeFile;
+    
+    // Remove button if it exists
+    if (this.$runBtn.isConnected) {
+      this.$runBtn.remove();
     }
+    
+    // Check if current file is runnable
+    if (file && languageRunners.canRun(file.filename)) {
+      const $header = document.querySelector("#root")?.querySelector('header');
+      if ($header) {
+        // Insert before the last child
+        $header.insertBefore(this.$runBtn, $header.lastChild);
+      }
+    }
+  }
 
-    // Hook into run method
-    if (this.originalRun) {
-      EditorFile.prototype.run = function() {
-        try {
-          if (languageRunners.canRun(this.filename)) {
-            languageRunners.runFile(this, false);
-          } else {
-            plugin.originalRun.call(this);
-          }
-        } catch (error) {
-          console.error('Plugin run error:', error);
-          // Always fallback to original
-          try {
-            plugin.originalRun.call(this);
-          } catch (originalError) {
-            console.error('Original run also failed:', originalError);
-          }
-        }
-      };
+  async run() {
+    const file = editorManager.activeFile;
+    
+    if (file && languageRunners.canRun(file.filename)) {
+      await languageRunners.runFile(file);
     }
   }
 
   async destroy() {
-    // Cleanup when plugin is uninstalled
+    // Remove play button
+    if (this.$runBtn) {
+      this.$runBtn.onclick = null;
+      this.$runBtn.remove();
+    }
+
+    editorManager.off('switch-file', this.checkRunnable.bind(this));
+    editorManager.off('rename-file', this.checkRunnable.bind(this));
+    
+    // Cleanup language runners
     languageRunners.destroy();
-    
-    const EditorFile = acode.require('EditorFile');
-    
-    // Restore original methods
-    if (this.originalCanRun) {
-      EditorFile.prototype.canRun = this.originalCanRun;
-    }
-    if (this.originalRun) {
-      EditorFile.prototype.run = this.originalRun;
-    }
-    if (this.originalReadCanRun) {
-      EditorFile.prototype.readCanRun = this.originalReadCanRun;
-    }
   }
 }
 
