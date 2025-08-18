@@ -3,7 +3,7 @@
   "id": "acode.runner.plugin",
   "name": "Runner",
   "main": "main.js",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "repository": "https://github.com/Acode-Foundation/acode-runner-plugin.git",
   "icon": "icon.png",
   "minVersionCode": 963,

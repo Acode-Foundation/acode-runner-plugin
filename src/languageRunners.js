@@ -32,7 +32,7 @@ export default class LanguageRunners {
 				},
 				{
 					cmd: 'clang "{file}" -o "{name}" && ./{name}',
-					packages: ['clang', 'musl-dev']
+					packages: ['clang']
 				}
 			],
 			description: 'C compiler'
@@ -43,12 +43,8 @@ export default class LanguageRunners {
 			extensions: ['cpp', 'cxx', 'cc', 'c++'],
 			commands: [
 				{
-					cmd: 'g++ "{file}" -o "{name}" && ./{name}',
-					packages: ['g++', 'musl-dev']
-				},
-				{
 					cmd: 'clang++ "{file}" -o "{name}" && ./{name}',
-					packages: ['clang', 'musl-dev']
+					packages: ['clang']
 				}
 			],
 			description: 'C++ compiler'
