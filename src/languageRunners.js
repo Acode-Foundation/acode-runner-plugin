@@ -104,6 +104,13 @@ export default class LanguageRunners {
 			description: "Lua interpreter"
 		});
 
+		// Luau
+		this.#runners.set("luau", {
+			extensions: ["luau"],
+			commands: [{ cmd: 'luau "{file}"', packages: ["luau"] }],
+			description: "Luau interpreter"
+		});
+
 		// Shell scripts
 		this.#runners.set('shell', {
 			extensions: ['sh', 'bash'],
@@ -132,6 +139,9 @@ export default class LanguageRunners {
 	 */
 	canRun(filename) {
 		if (!filename) return false;
+		
+		// Exclude runner-created names like "Run: test.py"
+		if (filename.startsWith('Run: ')) return false;
 		
 		// Quick extension check
 		const lastDot = filename.lastIndexOf('.');
