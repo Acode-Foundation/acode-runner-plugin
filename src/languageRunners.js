@@ -282,7 +282,22 @@ export default class LanguageRunners {
 		} else {
 			// Use actual file
 			const actualPath = file.uri.startsWith('file://') ? file.uri.substring(7) : file.uri;
-			workingDir = actualPath.includes('/data/user/0/com.foxdebug.acode/files/alpine/home') ? '$HOME' : `'${acode.require('Url').dirname(actualPath)}'`;
+			const url = acode.require('Url');
+			const actualDir = url.dirname(actualPath);
+			const alpineHomePrefix = '/data/user/0/com.foxdebug.acode/files/alpine/home';
+			
+			if (actualDir.startsWith(alpineHomePrefix)) {
+				const relativeDir = actualDir.substring(alpineHomePrefix.length);
+				if (relativeDir) {
+					const escapedRelative = relativeDir.replace(/(["\\$`])/g, '\\$1');
+					workingDir = `"$HOME${escapedRelative}"`;
+				} else {
+					workingDir = '$HOME';
+				}
+			} else {
+				const escapedDir = actualDir.replace(/'/g, "'\\''");
+				workingDir = `'${escapedDir}'`;
+			}
 			
 			actualCommand = commandConfig.cmd
 				.replace(/\{file\}/g, filename)
@@ -367,12 +382,8 @@ export default class LanguageRunners {
 	 * Send command to terminal shell process
 	 */
 	async #sendCommand(terminal, command) {
-		if (terminal.component && terminal.component.pid) {
-			try {
-				await Executor.write(terminal.component.pid, command + '\r');
-			} catch (error) {
-				acode.require('terminal').write(terminal.id, command + '\r');
-			}
+    if (terminal) {
+      acode.require("terminal").write(terminal.id, `${command}\r`);
 		}
 	}
 
@@ -384,7 +395,7 @@ export default class LanguageRunners {
 			const mainCommand = commandConfig.cmd.split(' ')[0];
 			const result = await Executor.execute(`which ${mainCommand}`, true);
 			return result && result.trim() !== '';
-		} catch (error) {
+		} catch (_error) {
 			return false;
 		}
 	}
