@@ -330,6 +330,7 @@ export default class LanguageRunners {
 			script += `cat > '${tempFile}' << 'SOURCE_EOF' 2>/dev/null\n${fileContent}\nSOURCE_EOF\n`;
 		}
 
+		script += `clear && printf '\\e[3J'\n`;
 		script += `echo -e "\\033[1;1;36m[RUNNER]\\033[0m \\033[2;37mRunning\\033[0m \\033[1;93m${filename}\\033[0m\\033[2;37m...\\033[0m"\n`;
 		script += `echo\n`;
 
