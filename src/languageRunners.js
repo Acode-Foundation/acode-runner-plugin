@@ -3,7 +3,7 @@ const loader = acode.require('loader');
 
 export default class LanguageRunners {
 	#runners = new Map();
-	
+
 	init() {
 		this.#initializeDefaultRunners();
 	}
@@ -143,7 +143,7 @@ export default class LanguageRunners {
 	 * Get runner for file extension
 	 */
 	getRunnerForExtension(extension) {
-		for (const [id, runner] of this.#runners) {	
+		for (const [id, runner] of this.#runners) {
 			if (runner.extensions.includes(extension.toLowerCase())) {
 				return { id, ...runner };
 			}
@@ -156,23 +156,23 @@ export default class LanguageRunners {
 	 */
 	canRun(filename) {
 		if (!filename) return false;
-		
+
 		// Exclude runner-created names like "Run: test.py"
 		if (filename.startsWith('Run: ')) return false;
-		
+
 		// Quick extension check
 		const lastDot = filename.lastIndexOf('.');
 		if (lastDot === -1) return false;
-		
+
 		const extension = filename.substring(lastDot + 1).toLowerCase();
-		
+
 		// Fast lookup through all languages
 		for (const runner of this.#runners.values()) {
 			if (runner.extensions.includes(extension)) {
 				return true;
 			}
 		}
-		
+
 		return false;
 	}
 
@@ -203,7 +203,7 @@ export default class LanguageRunners {
 	async #executeWithRunner(runner, file) {
 		const filename = file.filename;
 		const nameWithoutExt = filename.replace(/\.[^/.]+$/, '');
-		
+
 		for (const commandConfig of runner.commands) {
 			try {
 				if (commandConfig.requiresCargo && file.uri && !await this.#checkCargoProject(file.uri)) {
@@ -237,7 +237,7 @@ export default class LanguageRunners {
 		try {
 			const filename = file.filename;
 			const fileContent = file.session.getValue();
-			
+
 			const terminal = await this.#getOrCreateTerminal(filename);
 
 			if (!terminal) {
@@ -247,7 +247,7 @@ export default class LanguageRunners {
 			terminal.file.makeActive();
 
 			await this.#executeWithWrapper(terminal, commandConfig, file, nameWithoutExt, fileContent);
-			
+
 			return true;
 		} catch (error) {
 			console.error('Error executing command:', error);
@@ -261,15 +261,15 @@ export default class LanguageRunners {
 	async #executeWithWrapper(terminal, commandConfig, file, nameWithoutExt, fileContent) {
 		const filename = file.filename;
 		const extension = filename.split('.').pop() || '';
-		
+
 		const wrapperScript = await this.#createWrapperScript(commandConfig, file, nameWithoutExt, fileContent);
 		const wrapperPath = `/tmp/acode_runner_${Date.now()}.sh`;
-		
+
 		const escapedScript = wrapperScript.replace(/'/g, "'\"'\"'");
-		
+
 		// Suppress echo during setup, clear screen, then run cleanly
 		const fullCommand = `stty -echo 2>/dev/null; printf '%s' '${escapedScript}' > '${wrapperPath}' && chmod +x '${wrapperPath}'; clear; stty echo 2>/dev/null; '${wrapperPath}'; rm -f '${wrapperPath}'`;
-		
+
 		await this.#sendCommand(terminal, fullCommand);
 	}
 
@@ -280,16 +280,16 @@ export default class LanguageRunners {
 		const filename = file.filename;
 		const extension = filename.split('.').pop() || '';
 		const tempFile = `/tmp/${filename}`;
-		
+
 		// Determine if we need to create a temp file
-		const needsTempFile = !file.uri || file.isUnsaved || 
+		const needsTempFile = !file.uri || file.isUnsaved ||
 			file.uri.startsWith('content://') || file.uri.includes('::') ||
 			file.uri.startsWith('ftp:') || file.uri.startsWith('sftp:');
-		
+
 		// Prepare the actual command
 		let actualCommand;
 		let workingDir = '/tmp';
-		
+
 		if (needsTempFile) {
 			// Use temp file
 			actualCommand = commandConfig.cmd
@@ -302,7 +302,7 @@ export default class LanguageRunners {
 			const url = acode.require('Url');
 			const actualDir = url.dirname(actualPath);
 			const alpineHomePrefix = '/data/user/0/com.foxdebug.acode/files/alpine/home';
-			
+
 			if (actualDir.startsWith(alpineHomePrefix)) {
 				const relativeDir = actualDir.substring(alpineHomePrefix.length);
 				if (relativeDir) {
@@ -315,7 +315,7 @@ export default class LanguageRunners {
 				const escapedDir = actualDir.replace(/'/g, "'\\''");
 				workingDir = `'${escapedDir}'`;
 			}
-			
+
 			actualCommand = commandConfig.cmd
 				.replace(/\{file\}/g, filename)
 				.replace(/\{name\}/g, nameWithoutExt)
@@ -324,12 +324,13 @@ export default class LanguageRunners {
 
 		// Create the wrapper script
 		let script = `#!/bin/bash\n`;
-		
+
 		// Create temp file if needed (completely silently)
 		if (needsTempFile) {
 			script += `cat > '${tempFile}' << 'SOURCE_EOF' 2>/dev/null\n${fileContent}\nSOURCE_EOF\n`;
 		}
-		
+
+		script += `clear; printf '\\e[3J'\n`;
 		script += `echo -e "\\033[1;1;36m[RUNNER]\\033[0m \\033[2;37mRunning\\033[0m \\033[1;93m${filename}\\033[0m\\033[2;37m...\\033[0m"\n`;
 		script += `echo\n`;
 
@@ -339,7 +340,7 @@ export default class LanguageRunners {
 		} else {
 			script += `${actualCommand}\n`;
 		}
-		
+
 		// Store exit code
 		script += `EXIT_CODE=$?\n`;
 
@@ -347,20 +348,20 @@ export default class LanguageRunners {
 		script += `echo\n`;
 		script += `echo -e "\\033[2;90m────────────────────────────────────────\\033[0m"\n`;
 		script += `if [ $EXIT_CODE -eq 0 ]; then\n`;
-		script += `    echo -e "\\033[1;1;36m[RUNNER]\\033[0m \\033[1;32m✅ Program finished successfully\\033[0m"\n`;
+		script += `    echo -e "\\033[1;1;36m[RUNNER]\\033[0m \\033[1;32m✅ Successfully\\033[0m"\n`;
 		script += `else\n`;
-		script += `    echo -e "\\033[1;1;36m[RUNNER]\\033[0m \\033[1;31m❌ Program finished with errors\\033[0m \\033[2;90m(exit code: \$EXIT_CODE)\\033[0m"\n`;
+		script += `    echo -e "\\033[1;1;36m[RUNNER]\\033[0m \\033[1;31m❌ With errors\\033[0m \\033[2;90m(exit code: \$EXIT_CODE)\\033[0m"\n`;
 		script += `fi\n`;
 		script += `echo -e "\\033[2;90m────────────────────────────────────────\\033[0m"\n`;
-		
+
 		// Clean up temp file if created (silently)
 		if (needsTempFile) {
 			script += `rm -f '${tempFile}' 2>/dev/null\n`;
 		}
-		
+
 		// Don't exit or close terminal, just finish normally
 		script += `echo\n`;
-		
+
 		return script;
 	}
 
@@ -370,21 +371,21 @@ export default class LanguageRunners {
 	async #getOrCreateTerminal(filename) {
 		try {
 			const existingTerminals = acode.require('terminal').getAll();
-			
+
 			// Look for a terminal that's not busy with installation
 			for (const [id, terminal] of existingTerminals) {
 				if (!terminal.name.includes('Install:')) {
 					return terminal;
 				}
 			}
-			
+
 			// Create new terminal
 			const terminal = await acode.require('terminal').createServer({
 				name: `Run: ${filename}`
 			});
-			
+
 			await new Promise(resolve => setTimeout(resolve, 500));
-			
+
 			return terminal;
 		} catch (error) {
 			console.error('Error creating terminal:', error);
@@ -396,8 +397,8 @@ export default class LanguageRunners {
 	 * Send command to terminal shell process
 	 */
 	async #sendCommand(terminal, command) {
-    if (terminal) {
-      acode.require("terminal").write(terminal.id, `${command}\r`);
+		if (terminal) {
+			acode.require("terminal").write(terminal.id, `${command}\r`);
 		}
 	}
 
