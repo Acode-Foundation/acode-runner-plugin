@@ -331,6 +331,9 @@ export default class LanguageRunners {
 		}
 		
 		script += `echo -e "\\033[1;1;36m[RUNNER]\\033[0m \\033[2;37mRunning\\033[0m \\033[1;93m${filename}\\033[0m\\033[2;37m...\\033[0m"\n`;
+		if (needsTempFile) {
+			script += `echo -e "\\033[1;33m[RUNNER] Note: File copied to /tmp. Copy the project into terminal home directory if you want multi-file support.\\033[0m"\n`;
+		}
 		script += `echo\n`;
 
 		// Change to working directory and execute
