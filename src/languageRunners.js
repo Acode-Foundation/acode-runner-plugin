@@ -50,6 +50,19 @@ export default class LanguageRunners {
 			description: 'C++ compiler'
 		});
 
+        // C#
+		this.#runners.set('csharp', {
+			extensions: ['cs'],
+			commands: [
+				{
+					cmd: `mkdir -p /tmp/csrun_{name} && cd /tmp/csrun_{name} && cp "{path}" ./Program.cs && export DOTNET_gcServer=0 DOTNET_GCHeapHardLimit=0x10000000 DOTNET_GCgen0size=0x2000000 && CSC=$(find /usr/lib/dotnet/sdk -name "csc.dll" 2>/dev/null | head -1) && REFDIR=$(find /usr/lib/dotnet/packs/Microsoft.NETCore.App.Ref -type d -name "net8.0" 2>/dev/null | head -1) && REFS=$(find "$REFDIR" -name "*.dll" 2>/dev/null | sed 's/^/-r:/' | tr '\n' ' ') && ([ -f Program.runtimeconfig.json ] || printf '{"runtimeOptions":{"tfm":"net8.0","framework":{"name":"Microsoft.NETCore.App","version":"8.0.0"}}}' > Program.runtimeconfig.json) && ([ -f GlobalUsings.cs ] || printf 'global using System;\\nglobal using System.Collections.Generic;\\nglobal using System.Linq;\\nglobal using System.IO;\\nglobal using System.Threading.Tasks;\\n' > GlobalUsings.cs) && dotnet exec "$CSC" -nologo -optimize -langversion:latest $REFS -out:Program.dll Program.cs GlobalUsings.cs && dotnet Program.dll`,
+					packages: ['dotnet8-sdk'],
+					checkCommand: 'dotnet'
+				}
+			],
+			description: 'C# compiler'
+		});
+        
 		// Java
 		this.#runners.set('java', {
 			extensions: ['java'],

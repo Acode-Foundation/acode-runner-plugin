@@ -1,5 +1,9 @@
 # ChangeLogs
 
+## `v1.0.6`
+
+- feat: add `csharp` support (via `csc` direct compilation, includes Android GC heap workaround for `dotnet` runtime)
+
 ## `v1.0.5`
 
 - feat: add `dart` support

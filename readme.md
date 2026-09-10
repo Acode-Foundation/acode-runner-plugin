@@ -20,6 +20,7 @@ A powerful code runner plugin for Acode that adds a **play button** to execute d
 | **Python**       | `.py`, `.pyw`                 | ✅     |
 | **C**            | `.c`                          | ✅     |
 | **C++**          | `.cpp`, `.cxx`, `.cc`, `.c++` | ✅     |
+| **C#**           | `.cs`                         | ✅     |
 | **Java**         | `.java`                       | ✅     |
 | **Go**           | `.go`                         | ✅     |
 | **PHP**          | `.php`                        | ✅     |
